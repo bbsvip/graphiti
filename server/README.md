@@ -27,8 +27,9 @@ Only stable releases are built automatically (pre-release versions are skipped).
 
 The REST server uses OpenAI's **Sign in with ChatGPT** public-client OAuth flow for
 LLM requests and a self-hosted Infinity server for embeddings and reranking. No
-OpenAI API key is needed. This changes the REST server's provider wiring; the core
-library and the separate MCP server retain their existing configuration. The LLM
+OpenAI API key is needed. The root Docker image serves both REST and the existing
+Graphiti MCP tools on the same port, using these shared provider connections. The core
+library and the standalone MCP entry point retain their existing configuration. The LLM
 can also use a keyless local OpenAI-compatible endpoint while Infinity stays the
 embedding and reranking provider.
 
@@ -57,6 +58,51 @@ create an administrator password, then use **Continue with ChatGPT**. Authorize
 ChatGPT plan usage in OpenAI's browser flow. After sign-in, load the model catalog,
 select the primary and small LLM models, and save connections. The account's model
 catalog supplies the choices; completing inference confirms model access.
+
+### MCP in the same container
+
+Use **Streamable HTTP** with `http://<deployment-host>:<GRAPHITI_PORT>/mcp/`.
+For the deployment at port 8123, the endpoint is
+`http://192.168.1.11:8123/mcp/`; the administration page also shows its URL.
+No separate MCP container, callback port, OpenAI sign-in or API key is needed.
+The endpoint starts with REST, exposes the existing MCP tool catalog, and uses the
+same Neo4j database, saved OAuth account or custom LLM, Infinity providers and token
+history. Provider/model changes on `/admin` apply to subsequent provider calls
+without restarting the container. In-flight calls keep the parameters they started with.
+
+In a client supporting JSON MCP configuration, for example:
+
+```json
+{
+  "mcpServers": {
+    "graphiti": {
+      "type": "http",
+      "url": "http://192.168.1.11:8123/mcp/"
+    }
+  }
+}
+```
+
+Call `get_status` to check configuration/database connectivity, then use
+`search_memory_facts`, `search_nodes`, `add_memory` or the other existing tools.
+Ingest/search reports how to complete setup if no usable account/model configuration
+has been saved. `add_memory` refuses unconfigured work before putting it in its queue.
+Once accepted, episode processing remains asynchronous and ordered per group, as in
+the original MCP server. The queue is in memory: shutdown drains it for up to five
+seconds and then cancels workers; remaining work does not survive recreation.
+
+`MCP_GROUP_ID` defaults to `main` when a tool omits its group ID; pass the group IDs
+of your existing REST data explicitly when searching them. Set `MCP_PUBLIC_URL` to
+the public origin when deploying behind a different host, port or reverse proxy.
+Compose for the remote server supplies the `192.168.1.11` origin with `GRAPHITI_PORT`.
+DNS-rebinding protection permits only that origin and local addresses. MCP keeps the
+existing standalone server's access model (no MCP authentication); `/admin`'s password
+protects management, not graph tools. Use the endpoint within your trusted network.
+
+For local development, run from this repository using the project `venv/`; the
+server wheel and Docker image also include the reused `mcp_server/src` sources.
+The standalone `mcp_server/main.py` remains available with its own configuration;
+it does not automatically use this deployment's web settings.
 
 The default Infinity URL is `http://192.168.1.11:7997` and the embedding model is
 `BAAI/bge-m3`. Choose the reranker model that your Infinity `/models` response lists
@@ -119,6 +165,8 @@ Optional environment settings (also editable connections on the web):
 | `GRAPHITI_PORT` | `8000`, including the OAuth callback port in Compose |
 | `GRAPHITI_BIND_HOST` | `127.0.0.1`; initialize the administrator before exposing the page |
 | `OPENAI_CALLBACK_PORT` | `8000` for runs outside Compose; must match the browser-facing port |
+| `MCP_PUBLIC_URL` | Public origin allowed by MCP transport security; remote Compose defaults to `http://192.168.1.11:<GRAPHITI_PORT>` |
+| `MCP_GROUP_ID` | `main`, default group for MCP tools |
 
 Saved web settings override model/Infinity environment defaults. `EMBEDDING_DIM`
 still controls the existing graph embedding dimension (default `1024`). The
@@ -204,6 +252,12 @@ model selection, usage accounting and independence from OAuth credentials.
 Manual callback completion is covered by isolated signed-token exchange, replay,
 admin/CSRF and callback-URI tests. It still requires live verification against an
 actual OpenAI authorization on the remote deployment.
+Integrated MCP is verified with protocol initialization, tool discovery and consecutive
+tool calls using a mock graph; provider changes, shared token accounting, rejection
+of unconfigured ingest, host allowlists, queue ordering and shutdown are covered.
+An actual MCP HTTP client also discovered all 13 tools and called status/search/ingest
+against the isolated mock deployment. The server wheel was built and its bundled
+MCP sources imported successfully outside the repository.
 Pending: inference against an actual configured llama.cpp/Ollama server, a Docker
 image build, and live OAuth ingest/search. Provide a running LLM URL/model through
 the page to enable the local LLM path; no local LLM service is started by Graphiti.

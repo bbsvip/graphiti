@@ -18,6 +18,7 @@ class QueueService:
         self._episode_queues: dict[str, asyncio.Queue] = {}
         # Dictionary to track if a worker is running for each group_id
         self._queue_workers: dict[str, bool] = {}
+        self._worker_tasks: dict[str, asyncio.Task] = {}
         # Store the graphiti client after initialization
         self._graphiti_client: Any = None
 
@@ -42,9 +43,32 @@ class QueueService:
 
         # Start a worker for this queue if one isn't already running
         if not self._queue_workers.get(group_id, False):
-            asyncio.create_task(self._process_episode_queue(group_id))
+            # Claim ownership before yielding: consecutive submissions share one worker.
+            self._queue_workers[group_id] = True
+            self._worker_tasks[group_id] = asyncio.create_task(
+                self._process_episode_queue(group_id)
+            )
 
         return self._episode_queues[group_id].qsize()
+
+    async def shutdown(self, timeout: float = 5) -> None:
+        """Drain pending episodes briefly, then stop workers before their client closes."""
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*(queue.join() for queue in self._episode_queues.values())),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                'Episode queue did not drain before shutdown; pending work is not persisted'
+            )
+        finally:
+            for task in self._worker_tasks.values():
+                task.cancel()
+            await asyncio.gather(*self._worker_tasks.values(), return_exceptions=True)
+            self._worker_tasks.clear()
+            self._episode_queues.clear()
+            self._queue_workers.clear()
 
     async def _process_episode_queue(self, group_id: str) -> None:
         """Process episodes for a specific group_id sequentially.

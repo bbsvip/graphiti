@@ -111,25 +111,40 @@ def _create_graphiti_client(settings: ZepEnvDep, **provider_clients) -> ZepGraph
 
 
 @asynccontextmanager
-async def configured_graphiti(settings: ZepEnvDep):
+async def configured_graphiti(settings: ZepEnvDep, *, live_config: bool = False):
     from graphiti_core.embedder.client import EMBEDDING_DIM
 
     auth = get_openai_auth()
     config = connection_settings()
     async with httpx.AsyncClient(timeout=120) as http:
-        embedder = InfinityEmbedder(
-            http, config['local_model_url'], config['embedding_model'], EMBEDDING_DIM, auth.store
-        )
-        reranker = InfinityReranker(
-            http, config['local_model_url'], config['reranker_model'], auth.store
-        )
-        llm_client = (
-            CompatibleLLMClient(
-                http, config['llm_base_url'], config['model'], config['small_model'], auth.store
+        if live_config:
+            from graph_service.runtime_clients import (
+                RuntimeEmbedder,
+                RuntimeLLMClient,
+                RuntimeReranker,
             )
-            if config.get('llm_provider', 'oauth') == 'custom'
-            else OpenAIOAuthClient(auth)
-        )
+
+            llm_client = RuntimeLLMClient(http)
+            embedder = RuntimeEmbedder(http, EMBEDDING_DIM)
+            reranker = RuntimeReranker(http)
+        else:
+            embedder = InfinityEmbedder(
+                http,
+                config['local_model_url'],
+                config['embedding_model'],
+                EMBEDDING_DIM,
+                auth.store,
+            )
+            reranker = InfinityReranker(
+                http, config['local_model_url'], config['reranker_model'], auth.store
+            )
+            llm_client = (
+                CompatibleLLMClient(
+                    http, config['llm_base_url'], config['model'], config['small_model'], auth.store
+                )
+                if config.get('llm_provider', 'oauth') == 'custom'
+                else OpenAIOAuthClient(auth)
+            )
         client = _create_graphiti_client(
             settings, llm_client=llm_client, embedder=embedder, cross_encoder=reranker
         )

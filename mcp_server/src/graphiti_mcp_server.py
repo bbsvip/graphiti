@@ -171,7 +171,7 @@ entity types via an edge_type_map. With no such configuration, default extractio
 
 When adding information, provide descriptive names and detailed content to improve search quality.
 When searching, use specific queries and consider filtering by group_id, type, or date range. The
-server requires a configured database and valid API keys for language-model operations.
+server requires a configured database and model connections for language-model operations.
 """
 
 # MCP server instance

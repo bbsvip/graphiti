@@ -125,6 +125,7 @@ async function refresh() {
   }
   providerControls();
   $('callback').textContent = status.callback_uri;
+  $('mcpEndpoint').textContent = new URL('/mcp/', window.location.origin).href;
 }
 async function loadModels() {
   const query = new URLSearchParams({ llm_provider: $('llmProvider').value });

@@ -11,6 +11,14 @@ This is an experimental Model Context Protocol (MCP) server implementation for G
 Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge
 graph capabilities.
 
+## Docker with the web administration page
+
+The repository-root Docker image also serves the existing MCP tools at `/mcp/`,
+alongside `/admin` and REST, using the account and provider/model settings saved on
+that page. For remote Neo4j, run `docker compose -f docker-compose.remote.yml up --build -d`
+from the repository root. See [the shared-runtime setup](../server/README.md#mcp-in-the-same-container).
+The standalone commands below retain their own provider configuration.
+
 ## Features
 
 The Graphiti MCP server provides comprehensive knowledge graph capabilities:

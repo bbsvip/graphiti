@@ -56,6 +56,7 @@ RUN groupadd -r app && useradd -r -d /app -g app app
 WORKDIR /app
 COPY ./server/pyproject.toml ./server/README.md ./server/uv.lock ./
 COPY ./server/graph_service ./graph_service
+COPY ./mcp_server/src ./mcp_server/src
 COPY ./graphiti_core /opt/graphiti/graphiti_core
 COPY ./pyproject.toml ./README.md ./py.typed /opt/graphiti/
 
@@ -73,6 +74,7 @@ ARG INSTALL_FALKORDB=false
 ARG INSTALL_LOCAL_CORE=false
 ARG SOCKET_FIREWALL_ENABLED=false
 ARG SOCKET_SCAN_ID=
+# App and MCP sources are copied into /app and imported directly at runtime.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=secret,id=socket_api_key \
     set -eu; \
@@ -91,7 +93,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       echo "socket_api_key absent; installing without Socket Firewall"; \
       UV_CMD="uv"; \
     fi; \
-    $UV_CMD sync --frozen --no-dev; \
+    $UV_CMD sync --frozen --no-dev --no-install-project; \
     if [ "$INSTALL_LOCAL_CORE" = "true" ]; then \
         if [ "$INSTALL_FALKORDB" = "true" ]; then \
             $UV_CMD pip install '/opt/graphiti[falkordb]'; \

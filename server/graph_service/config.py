@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import Depends
-from pydantic import Field
+from pydantic import AnyHttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore
 
 
@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     falkordb_port: int | None = Field(None)
     falkordb_database: str | None = Field(None)
     db_backend: str = Field('neo4j')
+    mcp_public_url: AnyHttpUrl | None = None
+    mcp_group_id: str = 'main'
 
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
