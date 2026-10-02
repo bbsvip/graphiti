@@ -10,19 +10,19 @@ exercises the public API end to end:
         -> DELETE /group/{group_id} to clean up.
 
 This is the server counterpart to ``mcp_server``'s live test. It is skipped
-automatically unless an OpenAI API key is available AND FalkorDB is reachable:
+automatically unless OAuth integration is explicitly enabled AND FalkorDB is reachable:
 
-- Local: the project-root ``.env`` is loaded, so an ``OPENAI_API_KEY`` there is
-  picked up. Start FalkorDB first, e.g.::
+- Local: sign in and save connections at ``/admin`` first. Supply the absolute
+  ``OPENAI_STATE_DIR`` of that server and ``GRAPHITI_RUN_OAUTH_INTEGRATION=1``.
+  Start FalkorDB first, e.g.::
 
       docker run -d --name falkordb -p 6379:6379 falkordb/falkordb:latest
       cd server && uv run pytest tests/test_live_falkordb_int.py
 
-- CI: ``OPENAI_API_KEY`` comes from the GitHub environment and FalkorDB runs as a
-  container (see .github/workflows/server-tests.yml).
+- CI without an explicitly supplied OAuth runtime skips this test. An API key
+  alone no longer authorizes the REST server's provider connections.
 
-The model is taken from ``MODEL_NAME`` (CI pins a lighter, broadly-available
-model for speed/reliability), falling back to the server's configured default.
+The saved connection settings choose the OpenAI and Infinity models.
 """
 
 import contextlib
@@ -62,8 +62,15 @@ def _falkordb_reachable(host: str, port: int) -> bool:
 
 # Skip the whole module unless prerequisites are present, so the suite is a no-op
 # locally without setup and on fork PRs (which have no secrets).
-if not os.environ.get('OPENAI_API_KEY'):
-    pytest.skip('OPENAI_API_KEY not set; skipping live server tests', allow_module_level=True)
+if os.environ.get('GRAPHITI_RUN_OAUTH_INTEGRATION') != '1':
+    pytest.skip(
+        'Live OAuth integration not enabled; skipping live server tests', allow_module_level=True
+    )
+state_directory = os.environ.get('OPENAI_STATE_DIR')
+if not state_directory or not Path(state_directory).is_absolute():
+    pytest.skip('An absolute OPENAI_STATE_DIR is required', allow_module_level=True)
+if not (Path(state_directory) / 'openai-runtime.sqlite3').is_file():
+    pytest.skip('Sign in at /admin and save connections first', allow_module_level=True)
 if not _falkordb_reachable(FALKORDB_HOST, FALKORDB_PORT):
     pytest.skip(
         f'FalkorDB not reachable at {FALKORDB_HOST}:{FALKORDB_PORT}; skipping live server tests',

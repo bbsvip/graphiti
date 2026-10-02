@@ -1,0 +1,32 @@
+services:
+  graph:
+    build:
+      context: .
+      args:
+        INSTALL_LOCAL_CORE: "true"
+    ports:
+      - "${GRAPHITI_BIND_HOST:-127.0.0.1}:${GRAPHITI_PORT:-8000}:8000"
+    volumes:
+      - openai_state:/app/.openai-runtime
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthcheck')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    environment:
+      - OPENAI_STATE_DIR=/app/.openai-runtime
+      - LLM_PROVIDER=${LLM_PROVIDER:-oauth}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - OPENAI_CALLBACK_PORT=${GRAPHITI_PORT:-8000}
+      - LOCAL_MODEL_URL=${LOCAL_MODEL_URL:-http://192.168.1.11:7997}
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-BAAI/bge-m3}
+      - RERANKER_MODEL_NAME=${RERANKER_MODEL_NAME:-}
+      - GRAPHITI_TELEMETRY_ENABLED=false
+      - NEO4J_URI=${NEO4J_URI:-bolt://192.168.1.11:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env}
+      - PORT=8000
+      - DB_BACKEND=neo4j
+
+volumes:
+  openai_state:

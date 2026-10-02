@@ -45,7 +45,9 @@ RUN set -eux; \
 # Configure uv for runtime
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON_DOWNLOADS=never
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/venv \
+    VIRTUAL_ENV=/app/venv
 
 # Create non-root user
 RUN groupadd -r app && useradd -r -d /app -g app app
@@ -54,6 +56,8 @@ RUN groupadd -r app && useradd -r -d /app -g app app
 WORKDIR /app
 COPY ./server/pyproject.toml ./server/README.md ./server/uv.lock ./
 COPY ./server/graph_service ./graph_service
+COPY ./graphiti_core /opt/graphiti/graphiti_core
+COPY ./pyproject.toml ./README.md ./py.typed /opt/graphiti/
 
 # Install server dependencies (without graphiti-core from lockfile)
 # Then install graphiti-core from PyPI at the desired version
@@ -66,6 +70,7 @@ COPY ./server/graph_service ./graph_service
 # SOCKET_SCAN_ID (unique per release run) invalidates this layer, and
 # UV_NO_CACHE stops uv serving wheels from the cache mount below.
 ARG INSTALL_FALKORDB=false
+ARG INSTALL_LOCAL_CORE=false
 ARG SOCKET_FIREWALL_ENABLED=false
 ARG SOCKET_SCAN_ID=
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -87,7 +92,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       UV_CMD="uv"; \
     fi; \
     $UV_CMD sync --frozen --no-dev; \
-    if [ -n "$GRAPHITI_VERSION" ]; then \
+    if [ "$INSTALL_LOCAL_CORE" = "true" ]; then \
+        if [ "$INSTALL_FALKORDB" = "true" ]; then \
+            $UV_CMD pip install '/opt/graphiti[falkordb]'; \
+        else \
+            $UV_CMD pip install /opt/graphiti; \
+        fi; \
+    elif [ -n "$GRAPHITI_VERSION" ]; then \
         if [ "$INSTALL_FALKORDB" = "true" ]; then \
             $UV_CMD pip install --upgrade "graphiti-core[falkordb]==$GRAPHITI_VERSION"; \
         else \
@@ -102,11 +113,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     fi
 
 # Change ownership to app user
-RUN chown -R app:app /app
+RUN mkdir -p /app/.openai-runtime && chown -R app:app /app
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/venv/bin:$PATH"
 
 # Switch to non-root user
 USER app
@@ -116,4 +127,4 @@ ENV PORT=8000
 EXPOSE $PORT
 
 # Use uv run with --no-sync to avoid re-syncing on startup
-CMD ["uv", "run", "--no-sync", "uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "--no-sync", "uvicorn", "graph_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

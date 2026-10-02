@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Graphiti · Quản lý kết nối LLM</title>
+  <link rel="stylesheet" href="/admin/assets/admin.css">
+  <script src="/admin/assets/admin.js" defer></script>
+</head>
+<body>
+  <header><a class="brand" href="/admin">Graphiti<span> / Connections</span></a><span class="badge">Self-hosted</span></header>
+  <main>
+    <div class="heading"><div><p class="eyebrow">QUẢN LÝ KẾT NỐI</p><h1>LLM &amp; sử dụng token</h1><p>Dùng ChatGPT OAuth hoặc LLM local qua OpenAI-compatible URL. Embeddings và reranker chạy trên Infinity của bạn.</p></div><button id="adminLogout" class="quiet" hidden>Thoát quản trị</button></div>
+    <p id="notice" class="notice" role="status" hidden></p>
+    <section id="authPanel" class="panel" hidden>
+      <h2 id="authTitle">Đăng nhập quản trị</h2>
+      <p id="authDescription">Mật khẩu này bảo vệ trang quản lý của Graphiti.</p>
+      <form id="passwordForm"><label for="password">Mật khẩu quản trị</label><input id="password" type="password" minlength="10" maxlength="256" autocomplete="current-password" required><button type="submit">Tiếp tục</button></form>
+    </section>
+    <div id="dashboard" hidden>
+      <section id="oauthAccount" class="panel account"><div><p class="eyebrow">TÀI KHOẢN CHATGPT</p><h2 id="accountName">Chưa kết nối OpenAI</h2><p id="accountDescription">Các yêu cầu LLM đủ điều kiện sẽ sử dụng gói ChatGPT sau khi bạn cấp quyền.</p></div><div class="actions"><select id="accounts" aria-label="Chọn tài khoản ChatGPT"></select><button id="connect">Continue with ChatGPT</button><button id="disconnect" class="quiet" hidden>Ngắt kết nối</button></div></section>
+      <div id="welcome" class="notice" hidden>Bạn đang sử dụng gói ChatGPT cho các yêu cầu AI đủ điều kiện trong Graphiti. Bạn có thể quản lý quyền và mức sử dụng trong phần cài đặt ChatGPT. <button id="dismissWelcome" class="quiet">Đã hiểu</button></div>
+      <section class="metrics" aria-label="Tổng token của ứng dụng">
+        <article><p>Tổng token</p><strong id="totalTokens">0</strong><span>Input + output · toàn thời gian</span></article>
+        <article><p>Input</p><strong id="inputTokens">0</strong><span id="cachedTokens">0 token cache trong input</span></article>
+        <article><p>Output</p><strong id="outputTokens">0</strong><span>LLM sinh nội dung</span></article>
+        <article><p>Yêu cầu</p><strong id="requests">0</strong><span id="failures">0 yêu cầu lỗi</span></article>
+      </section>
+      <section class="panel"><div class="sectionHeading"><div><h2>Token theo ngày</h2><p>30 ngày gần nhất · theo ngày UTC · chỉ các yêu cầu của ứng dụng này</p></div><button id="refresh" class="quiet">Làm mới</button></div><div class="legend"><span class="inputDot">Input</span><span class="outputDot">Output</span></div><div id="chart" class="chart" aria-label="Biểu đồ token theo ngày"></div><p class="hint">Token cache đã nằm trong input. Yêu cầu lỗi không trả usage sẽ không được ước lượng token.</p><p class="usageLink">Quota và quyền sử dụng toàn tài khoản: <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">Manage usage ↗</a></p></section>
+      <section class="panel"><h2>Kết nối &amp; model</h2><p id="llmDescription">Chọn model OpenAI từ danh sách của tài khoản đã đăng nhập. Graphiti không cần API key.</p><form id="connectionForm" class="connections">
+        <div class="wide"><label for="llmProvider">Kết nối LLM</label><select id="llmProvider"><option value="oauth">ChatGPT OAuth</option><option value="custom">OpenAI-compatible URL · llama.cpp / Ollama</option></select></div>
+        <div id="customLlmFields" class="wide" hidden><label for="llmBaseUrl">Base URL của LLM</label><input id="llmBaseUrl" type="url" placeholder="http://host:11434/v1"><span class="hint">Bao gồm /v1. Dùng server local không yêu cầu API key; OAuth token không được gửi tới URL này. Sau khi nhập URL, bấm Tải danh sách model.</span></div>
+        <div><label for="model">Model LLM</label><select id="model" required></select></div><div><label for="smallModel">Model LLM cho tác vụ nhỏ</label><select id="smallModel" required></select></div>
+        <div class="wide"><label for="localUrl">URL dịch vụ Infinity</label><input id="localUrl" type="url" required><span class="hint">Địa chỉ phải truy cập được từ bên trong container.</span></div>
+        <div><label for="embeddingModel">Model embeddings</label><input id="embeddingModel" list="embeddingOptions" required><datalist id="embeddingOptions"></datalist></div>
+        <div><label for="rerankerModel">Model reranker</label><input id="rerankerModel" list="rerankerOptions" required><datalist id="rerankerOptions"></datalist></div>
+        <p class="hint wide">Đổi model embeddings cho graph đã có dữ liệu cần tạo lại embeddings của dữ liệu đó. Trang này không tự sửa dữ liệu graph.</p>
+        <div class="wide actions"><button type="submit">Lưu kết nối</button><button id="loadModels" type="button" class="quiet">Tải danh sách model</button><span id="savedStatus" role="status"></span></div>
+      </form><p id="oauthCallback" class="hint">Callback OAuth: <code id="callback"></code>. Nếu Docker ở máy chủ từ xa, cần tunnel cổng callback về máy mở trình duyệt.</p></section>
+      <section class="panel"><h2>Sử dụng theo model</h2><div class="tableWrap"><table><thead><tr><th>Kết nối / model</th><th>Yêu cầu</th><th>Input</th><th>Output</th></tr></thead><tbody id="modelUsage"></tbody></table></div></section>
+    </div>
+  </main>
+  <footer>Graphiti · Credentials được giữ ở server · Không lưu OAuth token trong trình duyệt</footer>
+</body>
+</html>
