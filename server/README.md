@@ -135,8 +135,26 @@ The existing FalkorDB concurrency limitation still applies.
 
 The documented public-client flow requires an exact loopback callback such as
 `http://127.0.0.1:8000/auth/callback`. A browser on your laptop cannot reach the
-remote container through its own loopback address. Keep Compose's private binding
-and forward the port first:
+remote container through its own loopback address. For a remote Docker/LXC deployment
+without SSH, use the manual completion form in the administration page:
+
+1. Open your deployment's `/admin` and sign in as administrator.
+2. Click **Continue with ChatGPT** and authorize in OpenAI's window.
+3. When the browser redirects to the unreachable `127.0.0.1` callback, copy the
+   complete URL from that window's address bar, including its query string.
+4. Return to `/admin`, expand **Đăng nhập Docker / LXC không có SSH**, paste the
+   URL and click **Hoàn tất đăng nhập**. Finish within the sign-in attempt's
+   10-minute lifetime; otherwise start a new attempt.
+
+This is an app-provided relay of the callback parameters, not a different OAuth
+redirect URI. The protected POST endpoint checks the exact callback URI and rejects
+duplicate parameters, then reuses the existing state/PKCE, identity and scope
+validation. It never visits the pasted URL or returns OAuth tokens to the browser.
+The input is cleared on submission and the full callback URL is not persisted.
+Treat the one-time authorization code as a credential: use your trusted admin
+connection (prefer HTTPS for remote access) and do not share it in chat or logs.
+
+Alternatively, keep Compose's private binding and forward the port with SSH:
 
 ```sh
 ssh -L 8000:127.0.0.1:8000 user@docker-host
@@ -183,6 +201,9 @@ Verified: isolated OAuth/security and custom-LLM request tests; administration U
 save/reload and provider switching with a mock LLM catalog; live Infinity embedding
 and reranking requests. The custom LLM protocol tests validate schema adherence,
 model selection, usage accounting and independence from OAuth credentials.
+Manual callback completion is covered by isolated signed-token exchange, replay,
+admin/CSRF and callback-URI tests. It still requires live verification against an
+actual OpenAI authorization on the remote deployment.
 Pending: inference against an actual configured llama.cpp/Ollama server, a Docker
 image build, and live OAuth ingest/search. Provide a running LLM URL/model through
 the page to enable the local LLM path; no local LLM service is started by Graphiti.

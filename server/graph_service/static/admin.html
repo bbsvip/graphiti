@@ -19,6 +19,7 @@
     </section>
     <div id="dashboard" hidden>
       <section id="oauthAccount" class="panel account"><div><p class="eyebrow">TÀI KHOẢN CHATGPT</p><h2 id="accountName">Chưa kết nối OpenAI</h2><p id="accountDescription">Các yêu cầu LLM đủ điều kiện sẽ sử dụng gói ChatGPT sau khi bạn cấp quyền.</p></div><div class="actions"><select id="accounts" aria-label="Chọn tài khoản ChatGPT"></select><button id="connect">Continue with ChatGPT</button><button id="disconnect" class="quiet" hidden>Ngắt kết nối</button></div></section>
+      <details id="manualCallback" class="panel"><summary>Đăng nhập Docker / LXC không có SSH</summary><p>Sau khi bấm Continue with ChatGPT và cấp quyền, trình duyệt có thể báo không kết nối được tới 127.0.0.1. Sao chép toàn bộ URL trên thanh địa chỉ của cửa sổ đó, quay lại trang này và dán bên dưới. Không đổi IP hoặc cổng trong URL.</p><form id="callbackForm"><label for="callbackUrl">URL callback sau đăng nhập</label><input id="callbackUrl" type="url" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:8123/auth/callback?code=…&amp;state=…" required><p class="hint">URL chứa code dùng một lần. Chỉ dán vào trang quản lý của bạn, không gửi vào chat hoặc chia sẻ cho người khác.</p><button type="submit">Hoàn tất đăng nhập</button></form></details>
       <div id="welcome" class="notice" hidden>Bạn đang sử dụng gói ChatGPT cho các yêu cầu AI đủ điều kiện trong Graphiti. Bạn có thể quản lý quyền và mức sử dụng trong phần cài đặt ChatGPT. <button id="dismissWelcome" class="quiet">Đã hiểu</button></div>
       <section class="metrics" aria-label="Tổng token của ứng dụng">
         <article><p>Tổng token</p><strong id="totalTokens">0</strong><span>Input + output · toàn thời gian</span></article>
@@ -36,7 +37,7 @@
         <div><label for="rerankerModel">Model reranker</label><input id="rerankerModel" list="rerankerOptions" required><datalist id="rerankerOptions"></datalist></div>
         <p class="hint wide">Đổi model embeddings cho graph đã có dữ liệu cần tạo lại embeddings của dữ liệu đó. Trang này không tự sửa dữ liệu graph.</p>
         <div class="wide actions"><button type="submit">Lưu kết nối</button><button id="loadModels" type="button" class="quiet">Tải danh sách model</button><span id="savedStatus" role="status"></span></div>
-      </form><p id="oauthCallback" class="hint">Callback OAuth: <code id="callback"></code>. Nếu Docker ở máy chủ từ xa, cần tunnel cổng callback về máy mở trình duyệt.</p></section>
+      </form><p id="oauthCallback" class="hint">Callback OAuth: <code id="callback"></code>. Với Docker từ xa, dùng phần hoàn tất đăng nhập thủ công phía trên hoặc SSH tunnel.</p></section>
       <section class="panel"><h2>Sử dụng theo model</h2><div class="tableWrap"><table><thead><tr><th>Kết nối / model</th><th>Yêu cầu</th><th>Input</th><th>Output</th></tr></thead><tbody id="modelUsage"></tbody></table></div></section>
     </div>
   </main>

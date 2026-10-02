@@ -66,6 +66,7 @@ function providerControls() {
   $('customLlmFields').hidden = !custom;
   $('llmBaseUrl').required = custom;
   $('oauthAccount').hidden = custom;
+  $('manualCallback').hidden = custom;
   $('oauthCallback').hidden = custom;
   $('welcome').hidden = custom || !currentStatus?.active_account || !!localStorage.getItem('graphiti-plan-welcome');
   $('llmDescription').textContent = custom
@@ -163,7 +164,7 @@ async function connect(accountId = null) {
     const result = await api('openai/login', { account_id: accountId });
     if (popup) popup.location.href = result.url;
     else window.location.href = result.url;
-    notice('Hoàn tất đăng nhập trong cửa sổ OpenAI, sau đó chọn model và lưu kết nối.');
+    notice('Hoàn tất đăng nhập trong cửa sổ OpenAI. Nếu callback 127.0.0.1 không mở được, dán URL của cửa sổ đó vào phần Đăng nhập Docker / LXC bên dưới.');
   } catch (error) { if (popup) popup.close(); throw error; }
 }
 $('passwordForm').addEventListener('submit', async event => {
@@ -176,6 +177,21 @@ $('passwordForm').addEventListener('submit', async event => {
     notice('');
     await refresh();
     await loadModels();
+  } catch (error) { notice(error.message, true); }
+  finally { button.disabled = false; }
+});
+$('callbackForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = event.submitter;
+  const callbackUrl = $('callbackUrl').value;
+  $('callbackUrl').value = '';
+  button.disabled = true;
+  try {
+    await api('openai/callback', { callback_url: callbackUrl });
+    $('manualCallback').open = false;
+    await refresh();
+    await loadModels();
+    notice('Đã kết nối OpenAI. Chọn model và lưu kết nối để sử dụng.');
   } catch (error) { notice(error.message, true); }
   finally { button.disabled = false; }
 });
@@ -233,6 +249,7 @@ setInterval(async () => {
 }, 15000);
 (async () => {
   try {
+    $('manualCallback').open = !['127.0.0.1', 'localhost'].includes(window.location.hostname);
     const session = await api('session');
     needsSetup = session.needs_setup;
     if (session.authenticated) { await refresh(); await loadModels(); }

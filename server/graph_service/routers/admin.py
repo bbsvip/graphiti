@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Literal
+from urllib.parse import parse_qsl, urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -58,6 +59,10 @@ class ConnectionInput(BaseModel):
 
 class AccountInput(BaseModel):
     account_id: str | None = None
+
+
+class CallbackInput(BaseModel):
+    callback_url: str
 
 
 @router.get('', include_in_schema=False)
@@ -160,6 +165,36 @@ async def select_account(body: AccountInput):
             raise HTTPException(400, 'This account needs to sign in again')
         auth.store.set('active_account', body.account_id)
     return {'selected': True}
+
+
+@protected.post('/api/openai/callback')
+async def manual_callback(body: CallbackInput, response: Response):
+    auth = get_openai_auth()
+    response.headers['Cache-Control'] = 'no-store'
+    try:
+        if len(body.callback_url) > 16384:
+            raise ValueError('Callback is too long')
+        parsed = urlsplit(body.callback_url.strip())
+        if (
+            f'{parsed.scheme}://{parsed.netloc}{parsed.path}' != auth.redirect_uri
+            or parsed.fragment
+        ):
+            raise ValueError('Callback URI does not match this deployment')
+        pairs = parse_qsl(parsed.query, keep_blank_values=True, strict_parsing=True)
+        query = dict(pairs)
+        if len(query) != len(pairs):
+            raise ValueError('Duplicate OAuth parameters')
+        # Use the original attempt's state, PKCE verifier and redirect URI; never fetch this URL.
+        await auth.finish_login(query)
+    except Exception as exc:
+        # Do not expose pasted codes, state or upstream token responses in an API error.
+        raise HTTPException(
+            400,
+            'OpenAI sign-in failed or expired. Copy the complete callback URL '
+            'from the latest sign-in attempt, or start a new sign-in.',
+            headers={'Cache-Control': 'no-store'},
+        ) from exc
+    return {'connected': True}
 
 
 @protected.post('/api/openai/logout')

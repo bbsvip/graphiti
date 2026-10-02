@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from types import SimpleNamespace
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
 import jwt
@@ -206,6 +206,103 @@ def test_admin_requires_session_and_csrf_header_and_never_exposes_tokens(auth, m
 
 class Result(BaseModel):
     answer: str
+
+
+def test_manual_callback_requires_admin_and_reuses_verified_oauth_flow(auth, monkeypatch):
+    auth = OpenAIAuth(auth.store, 8123)
+    monkeypatch.setattr(admin, 'get_openai_auth', lambda: auth)
+    app = FastAPI()
+    app.include_router(admin.router)
+    auth.begin_login()
+    query = {
+        'state': auth.store.get('pending_login')['state'],
+        'code': 'private-code',
+        'client_id': 'oaiapp_graphiti',
+    }
+    calls = auth_transport(auth, monkeypatch)
+    body = {'callback_url': auth.redirect_uri + '?' + urlencode(query)}
+    with TestClient(app) as client:
+        headers = {'x-graphiti-admin': '1'}
+        assert (
+            client.post('/admin/api/openai/callback', headers=headers, json=body).status_code == 401
+        )
+        assert not calls
+        client.post('/admin/api/setup', headers=headers, json={'password': 'secure-test-password'})
+        assert client.post('/admin/api/openai/callback', json=body).status_code == 403
+        assert not calls
+        response = client.post('/admin/api/openai/callback', headers=headers, json=body)
+        assert response.status_code == 200
+        assert response.json() == {'connected': True}
+        assert response.headers['cache-control'] == 'no-store'
+        assert auth.active_account()['subject'] == 'user1'
+        assert (
+            RuntimeStore(auth.store.path.parent).get('accounts')['oaiapp_graphiti']['access_token']
+            == 'access'
+        )
+        replay = client.post('/admin/api/openai/callback', headers=headers, json=body)
+        assert replay.status_code == 400
+        assert 'private-code' not in replay.text
+        assert query['state'] not in replay.text
+        assert 'refresh' not in response.text
+        assert sum(request.url.path == '/api/accounts/oauth/token' for request in calls) == 1
+
+
+@pytest.mark.parametrize(
+    'url',
+    [
+        'http://192.168.1.11:8000/auth/callback?state=s&code=c',
+        'http://localhost:8000/auth/callback?state=s&code=c',
+        'http://127.0.0.1:8123/auth/callback?state=s&code=c',
+        'http://127.0.0.1:8000/callback?state=s&code=c',
+        'http://user:password@127.0.0.1:8000/auth/callback?state=s&code=c',
+        'http://127.0.0.1:8000/auth/callback?state=s&code=c#fragment',
+        'http://127.0.0.1:8000/auth/callback?state=s&state=other&code=c',
+    ],
+)
+def test_manual_callback_rejects_wrong_uri_or_ambiguous_query_before_exchange(
+    auth, monkeypatch, url
+):
+    monkeypatch.setattr(admin, 'get_openai_auth', lambda: auth)
+    called = []
+
+    async def finish(query):
+        called.append(query)
+
+    monkeypatch.setattr(auth, 'finish_login', finish)
+    app = FastAPI()
+    app.include_router(admin.router)
+    with TestClient(app) as client:
+        headers = {'x-graphiti-admin': '1'}
+        client.post('/admin/api/setup', headers=headers, json={'password': 'secure-test-password'})
+        response = client.post(
+            '/admin/api/openai/callback', headers=headers, json={'callback_url': url}
+        )
+        assert response.status_code == 400
+        assert not called
+        assert auth.active_account() is None
+
+
+def test_manual_callback_invalid_state_leaves_pending_attempt_and_hides_code(auth, monkeypatch):
+    monkeypatch.setattr(admin, 'get_openai_auth', lambda: auth)
+    auth.begin_login()
+    pending = auth.store.get('pending_login')
+    app = FastAPI()
+    app.include_router(admin.router)
+    with TestClient(app) as client:
+        headers = {'x-graphiti-admin': '1'}
+        client.post('/admin/api/setup', headers=headers, json={'password': 'secure-test-password'})
+        response = client.post(
+            '/admin/api/openai/callback',
+            headers=headers,
+            json={
+                'callback_url': auth.redirect_uri
+                + '?state=wrong&code=private-code&client_id=oaiapp_graphiti'
+            },
+        )
+        assert response.status_code == 400
+        assert 'private-code' not in response.text
+        assert auth.store.get('pending_login') == pending
+        assert auth.active_account() is None
 
 
 @pytest.mark.asyncio
