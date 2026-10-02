@@ -49,7 +49,8 @@ def create_mcp_app(settings: Settings) -> Starlette:
     return upstream.mcp.streamable_http_app(
         streamable_http_path='/',
         json_response=True,
-        stateless_http=True,
+        # MCP clients need a session ID from initialize for subsequent tool calls.
+        stateless_http=False,
         transport_security=TransportSecuritySettings(allowed_hosts=hosts, allowed_origins=origins),
     )
 

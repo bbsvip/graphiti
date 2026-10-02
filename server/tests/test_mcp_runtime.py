@@ -123,14 +123,19 @@ def test_http_mcp_mount_lists_original_tools_and_executes_search(runtime, monkey
     monkeypatch.setattr(main, 'get_settings', lambda: settings)
     app = main.create_app(settings)
     headers = {'accept': 'application/json, text/event-stream'}
+    session_id = None
 
     def rpc(client, method, params, identifier):
+        nonlocal session_id
         response = client.post(
             '/mcp/',
-            headers=headers,
+            headers={**headers, **({'mcp-session-id': session_id} if session_id else {})},
             json={'jsonrpc': '2.0', 'id': identifier, 'method': method, 'params': params},
         )
         assert response.status_code == 200, response.text
+        if method == 'initialize':
+            session_id = response.headers.get('mcp-session-id')
+            assert session_id, 'initialize must return a Mcp-Session-Id for stateful MCP clients'
         return response.json()['result']
 
     with TestClient(app, base_url='http://192.168.1.11:8123') as client:

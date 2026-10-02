@@ -64,6 +64,9 @@ catalog supplies the choices; completing inference confirms model access.
 Use **Streamable HTTP** with `http://<deployment-host>:<GRAPHITI_PORT>/mcp/`.
 For the deployment at port 8123, the endpoint is
 `http://192.168.1.11:8123/mcp/`; the administration page also shows its URL.
+The initialize response includes `Mcp-Session-Id`; clients send that session ID
+with subsequent MCP requests. Opening the URL in a browser does not initialize
+an MCP client session.
 No separate MCP container, callback port, OpenAI sign-in or API key is needed.
 The endpoint starts with REST, exposes the existing MCP tool catalog, and uses the
 same Neo4j database, saved OAuth account or custom LLM, Infinity providers and token
