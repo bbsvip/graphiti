@@ -116,7 +116,7 @@ openai==1.92.2
     # via graphiti-core
 opentelemetry-api==1.45.0
     # via mcp
-packaging==25.0
+packaging==26.3
     # via pytest
 pluggy==1.6.0
     # via pytest
