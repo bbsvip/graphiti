@@ -169,3 +169,7 @@ cache.db*
 # Server-side OAuth credentials and dependency cache
 .openai-runtime/
 .uv-cache/
+.test-tmp/
+.graphiti-queue/
+node_modules/
+.pi/recovery/

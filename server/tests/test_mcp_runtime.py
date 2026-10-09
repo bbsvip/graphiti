@@ -109,7 +109,7 @@ def test_http_mcp_mount_lists_original_tools_and_executes_search(runtime, monkey
         add_episode=AsyncMock(),
         close=AsyncMock(),
     )
-    settings = Settings(mcp_public_url='http://192.168.1.11:8123')
+    settings = Settings(mcp_public_url='http://192.168.1.11:8123', openai_state_dir=auth.store.path.parent)
 
     @asynccontextmanager
     async def configured(settings, **kwargs):
@@ -221,6 +221,26 @@ def test_http_mcp_mount_lists_original_tools_and_executes_search(runtime, monkey
             6,
         )
         assert 'Sign in to OpenAI at /admin first' in json.dumps(result)
+        assert graph.add_episode.await_count == 2
+        # Installed MCP SDK rejects a terminated session BEFORE dispatching a write.
+        # This is the boundary the client uses for its single safe 404 recovery.
+        terminated = client.delete('/mcp/', headers={**headers, 'mcp-session-id': session_id})
+        assert terminated.status_code == 200
+        expired = client.post(
+            '/mcp/',
+            headers={**headers, 'mcp-session-id': session_id},
+            json={
+                'jsonrpc': '2.0',
+                'id': 10,
+                'method': 'tools/call',
+                'params': {
+                    'name': 'add_memory',
+                    'arguments': {'name': 'expired-write', 'episode_body': 'never dispatch'},
+                },
+            },
+        )
+        assert expired.status_code == 404
+        assert 'Session not found' in expired.text
         assert graph.add_episode.await_count == 2
     assert graph.search.await_count == 2
     graph.build_indices_and_constraints.assert_awaited_once()

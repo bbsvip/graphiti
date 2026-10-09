@@ -354,17 +354,43 @@ async def test_oauth_inference_preserves_schema_and_requires_completed_status(
     auth, monkeypatch, status
 ):
     from graphiti_core.prompts import Message
+    from openai.types.responses import Response
 
     from graph_service import oauth_client
 
     calls = []
-    response = SimpleNamespace(
-        status=status,
-        error=None,
-        output_text='{"answer":"yes"}',
-        usage=SimpleNamespace(
-            input_tokens=10, output_tokens=2, input_tokens_details=SimpleNamespace(cached_tokens=3)
-        ),
+    response = Response.model_validate(
+        {
+            'id': 'resp_security_test',
+            'created_at': 1,
+            'object': 'response',
+            'model': 'eligible',
+            'status': status,
+            'error': None,
+            'incomplete_details': None,
+            'instructions': None,
+            'parallel_tool_calls': True,
+            'tool_choice': 'auto',
+            'tools': [],
+            'output': [
+                {
+                    'type': 'message',
+                    'id': 'msg_security_test',
+                    'status': 'completed',
+                    'role': 'assistant',
+                    'content': [
+                        {'type': 'output_text', 'text': '{"answer":"yes"}', 'annotations': []}
+                    ],
+                }
+            ],
+            'usage': {
+                'input_tokens': 10,
+                'output_tokens': 2,
+                'total_tokens': 12,
+                'input_tokens_details': {'cached_tokens': 3},
+                'output_tokens_details': {'reasoning_tokens': 0},
+            },
+        }
     )
 
     class Stream:
@@ -392,7 +418,7 @@ async def test_oauth_inference_preserves_schema_and_requires_completed_status(
         async def __aexit__(self, *args):
             return None
 
-        def stream(self, **kwargs):
+        async def create(self, **kwargs):
             calls.append(kwargs)
             return Stream()
 
@@ -418,7 +444,13 @@ async def test_oauth_inference_preserves_schema_and_requires_completed_status(
             await client._generate_response(messages, Result)
     assert calls[0]['input'][0]['role'] == 'developer'
     assert calls[0]['store'] is False
-    assert calls[0]['text_format'] is Result
+    assert calls[0]['stream'] is True
+    text_format = calls[0]['text']['format']
+    assert text_format['type'] == 'json_schema'
+    assert text_format['strict'] is True
+    assert text_format['schema']['properties']['answer']['type'] == 'string'
+    assert text_format['schema']['required'] == ['answer']
+    assert text_format['schema']['additionalProperties'] is False
     assert 'temperature' not in calls[0]
     assert 'max_output_tokens' not in calls[0]
     assert auth.store.usage_summary()['totals']['total_tokens'] == 12

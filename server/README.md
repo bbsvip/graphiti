@@ -90,9 +90,17 @@ Call `get_status` to check configuration/database connectivity, then use
 `search_memory_facts`, `search_nodes`, `add_memory` or the other existing tools.
 Ingest/search reports how to complete setup if no usable account/model configuration
 has been saved. `add_memory` refuses unconfigured work before putting it in its queue.
-Once accepted, episode processing remains asynchronous and ordered per group, as in
-the original MCP server. The queue is in memory: shutdown drains it for up to five
-seconds and then cancels workers; remaining work does not survive recreation.
+Once accepted, episode processing remains asynchronous and ordered per group.
+The queue journals payloads, stable episode UUIDs, fixed reference times, attempts
+and queued/processing/succeeded/failed status in `OPENAI_STATE_DIR/episodes.sqlite3`.
+`queued` is **not** a claim of Neo4j persistence. Poll `get_episode_status` with the
+returned UUID/group; failed jobs remain recoverable. Transient retries are bounded
+(default three lifetime attempts); output/schema/refusal failures do not auto-retry.
+`retry_episode` is an explicit operator action after repairing the cause and never
+resets the budget. Shutdown drains briefly then retains canceled/pending jobs for
+restart. Use one runtime process per journal. See the [reliability and deployment
+runbook](../docs/mcp-ingest-reliability.md) for limits, verification and rollback.
+These changes are local; the remote deployment is not yet verified.
 
 `MCP_GROUP_ID` defaults to `main` when a tool omits its group ID; pass the group IDs
 of your existing REST data explicitly when searching them. Set `MCP_PUBLIC_URL` to
@@ -150,7 +158,9 @@ and history. Refreshes are serialized with a file lock, including across workers
 sharing this volume.
 
 The page shows application input/output/cached tokens, daily usage in UTC, and
-usage by provider/model. Cache tokens are a subset of input tokens. Failed LLM
+usage by provider/model. OAuth requests are accounted once after output/schema
+validation, retaining actual provider tokens even on invalid output; failures no
+longer mean upstream status alone. Ingest outcomes are separate queue job states. Cache tokens are a subset of input tokens. Failed LLM
 requests without an upstream usage payload are counted without estimating billed
 tokens. This is **application usage**, not an estimate of the account's remaining
 Codex quota. Use the **Manage usage** link for account-wide limits and app access.

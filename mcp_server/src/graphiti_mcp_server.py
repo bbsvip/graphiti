@@ -30,6 +30,7 @@ from models.response_types import (
     BuildCommunitiesResponse,
     CommunityResult,
     EpisodeEntitiesResponse,
+    EpisodeJobResponse,
     EpisodeSearchResponse,
     ErrorResponse,
     FactSearchResponse,
@@ -414,7 +415,7 @@ async def add_memory(
     update_communities: bool = False,
     saga: str | None = None,
     saga_previous_episode_uuid: str | None = None,
-) -> SuccessResponse | ErrorResponse:
+) -> EpisodeJobResponse | ErrorResponse:
     """Add an episode to memory. This is the primary way to add information to the graph.
 
     This function returns immediately and processes the episode addition in the background.
@@ -507,7 +508,7 @@ async def add_memory(
                 episode_type = EpisodeType.text
 
         # Submit to queue service for async processing
-        await queue_service.add_episode(
+        job = await queue_service.add_episode(
             group_id=effective_group_id,
             name=name,
             content=episode_body,
@@ -526,13 +527,43 @@ async def add_memory(
             saga_previous_episode_uuid=saga_previous_episode_uuid,
         )
 
-        return SuccessResponse(
-            message=f"Episode '{name}' queued for processing in group '{effective_group_id}'"
+        return EpisodeJobResponse(
+            **job,
+            message=(
+                'Episode queued for processing; not yet stored in Neo4j. '
+                'Poll get_episode_status using the returned uuid and group_id.'
+                if job['status'] == 'queued'
+                else f'Episode job status: {job["status"]}.'
+            ),
         )
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error queuing episode: {error_msg}')
         return ErrorResponse(error=f'Error queuing episode: {error_msg}')
+
+
+@mcp.tool()
+async def get_episode_status(
+    uuid: str, group_id: str | None = None
+) -> dict[str, Any] | ErrorResponse:
+    """Read durable ingest status (queued/processing/succeeded/failed), without episode content."""
+    if queue_service is None:
+        return ErrorResponse(error='Queue service not initialized')
+    try:
+        return queue_service.get_job(uuid, group_id or config.graphiti.group_id)
+    except ValueError:
+        return ErrorResponse(error='Episode job not found')
+
+
+@mcp.tool()
+async def retry_episode(uuid: str, group_id: str | None = None) -> dict[str, Any] | ErrorResponse:
+    """Explicitly retry a failed job after repairing its cause; never resets the attempt budget."""
+    if queue_service is None:
+        return ErrorResponse(error='Queue service not initialized')
+    try:
+        return await queue_service.retry_episode(uuid, group_id or config.graphiti.group_id)
+    except (ValueError, RuntimeError) as error:
+        return ErrorResponse(error=str(error))
 
 
 @mcp.tool()
@@ -1307,7 +1338,9 @@ async def initialize_server() -> ServerConfig:
 
     # Initialize services
     graphiti_service = GraphitiService(config, SEMAPHORE_LIMIT)
-    queue_service = QueueService()
+    queue_service = QueueService(
+        storage_path=Path(os.environ.get('GRAPHITI_QUEUE_PATH', '.graphiti-queue/episodes.sqlite3'))
+    )
     await graphiti_service.initialize()
 
     # Set global client for backward compatibility
@@ -1315,7 +1348,9 @@ async def initialize_server() -> ServerConfig:
     semaphore = graphiti_service.semaphore
 
     # Initialize queue service with the client
-    await queue_service.initialize(graphiti_client)
+    await queue_service.initialize(
+        graphiti_client, graphiti_service.entity_types, graphiti_service.edge_types
+    )
 
     # Return MCP configuration for transport
     return config.server
@@ -1325,7 +1360,16 @@ async def run_mcp_server():
     """Run the MCP server in the current event loop."""
     # Initialize the server
     mcp_config = await initialize_server()
+    try:
+        await _run_transport(mcp_config)
+    finally:
+        if queue_service is not None:
+            await queue_service.shutdown()
+        if graphiti_client is not None:
+            await graphiti_client.close()
 
+
+async def _run_transport(mcp_config: ServerConfig):
     # Run the server with configured transport
     logger.info(f'Starting MCP server with transport: {mcp_config.transport}')
     if mcp_config.transport == 'stdio':

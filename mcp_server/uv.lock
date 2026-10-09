@@ -1361,6 +1361,7 @@ name = "mcp-server"
 version = "1.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "filelock" },
     { name = "graphiti-core", extra = ["falkordb"] },
     { name = "mcp" },
     { name = "openai" },
@@ -1398,6 +1399,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'providers'", specifier = ">=0.107.1" },
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.25.3" },
+    { name = "filelock", specifier = ">=3.20.0" },
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=2.8.0" },
     { name = "graphiti-core", extras = ["falkordb"], specifier = ">=0.30.2" },
     { name = "groq", marker = "extra == 'providers'", specifier = ">=1.2.0" },

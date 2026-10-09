@@ -33,10 +33,14 @@ class RuntimeGraphitiService(upstream.GraphitiService):
 
 
 class RuntimeQueueService(upstream.QueueService):
-    async def add_episode(self, **kwargs: Any) -> int:
+    async def add_episode(self, **kwargs: Any) -> dict:
         # Do not accept background work that will fail only after acknowledging it.
         require_connections()
         return await super().add_episode(**kwargs)
+
+    async def retry_episode(self, uuid: str, group_id: str) -> dict:
+        require_connections()
+        return await super().retry_episode(uuid, group_id)
 
 
 def create_mcp_app(settings: Settings) -> Starlette:
@@ -66,8 +70,8 @@ async def mcp_lifespan(settings: Settings, client: Graphiti):
     service.entity_types = upstream.build_entity_types(config.graphiti.entity_types)
     service.edge_types = upstream.build_edge_types(config.graphiti.edge_types)
     service.edge_type_map = upstream.build_edge_type_map(config.graphiti.edge_type_map)
-    queue = RuntimeQueueService()
-    await queue.initialize(client)
+    queue = RuntimeQueueService(storage_path=settings.openai_state_dir / 'episodes.sqlite3')
+    await queue.initialize(client, service.entity_types, service.edge_types)
     upstream.config = config
     upstream.graphiti_service = service
     upstream.queue_service = queue

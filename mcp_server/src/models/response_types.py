@@ -13,6 +13,15 @@ class SuccessResponse(TypedDict):
     message: str
 
 
+class EpisodeJobResponse(TypedDict):
+    uuid: str
+    group_id: str
+    status: str
+    attempts: int
+    error: str | None
+    message: str
+
+
 class NodeResult(TypedDict):
     uuid: str
     name: str
